@@ -1,0 +1,103 @@
+services:
+  suricata:
+    image: jasonish/suricata
+    container_name: suricata
+    volumes:
+      - ./suricata.rules:/etc/suricata/rules/local.rules
+      - /var/log/suricata:/var/log/suricata
+      - /var/lib/suricata:/var/lib/suricata
+      - ./suricata-logs:/var/log/suricata
+    command: ["-i", "eth0"]
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+      - NET_RAW
+    network_mode: host
+  
+  kali:
+    build: ./kalii
+    container_name: kali
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./kalii/attack.py:/root/attack.py
+    networks:
+      hardwarelab:
+        ipv4_address: 192.168.30.10
+
+  web_server:
+    build: 
+      context: ./web_server
+    container_name: web_server
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./web_server/nginx.conf:/etc/nginx/nginx.conf:ro 
+      - ./web_server/ssl:/etc/nginx/ssl
+      - ./web_server/website:/usr/share/nginx/html
+    depends_on:
+      - php-fpm
+    networks:
+      hardwarelab:
+        ipv4_address: 192.168.30.11
+
+  php-fpm:
+    image: bitnami/php-fpm
+    container_name: php-fpm
+    volumes:
+      - ./web_server/website:/usr/share/nginx/html
+    networks:
+      hardwarelab:
+        ipv4_address: 192.168.30.20
+
+  ftp_server:
+    image: fauria/vsftpd
+    container_name: ftp_server
+    ports:
+      - "21:21"
+    environment:
+      - FTP_USER=admin
+      - FTP_PASS=pass
+    networks:
+      hardwarelab:
+        ipv4_address: 192.168.30.12
+
+  mysql_db:
+    image: mysql:latest
+    container_name: mysql_db
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=hardware_store
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+    networks:
+      hardwarelab:
+        ipv4_address: 192.168.30.13
+
+  malicious_server:
+    image: python:latest
+    container_name: malicious_server
+    volumes:
+      - ./exfil_data:/data  
+      - ./malicious_server:/app
+    working_dir: /app
+    command: ["sh", "-c", "pip install flask && python malicious_server.py"]
+    ports:
+      - "5000:5000" 
+    networks:
+      hardwarelab:
+        ipv4_address: 192.168.30.14
+
+networks:
+  hardwarelab:
+    name: hardwarelab
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.30.0/24
